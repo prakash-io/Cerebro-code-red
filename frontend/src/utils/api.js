@@ -17,9 +17,9 @@ async function request(path, options = {}) {
   } catch (error) {
     window.clearTimeout(timeoutId);
     if (error.name === "AbortError") {
-      throw new Error("Request timed out. Confirm the Django server is running on http://127.0.0.1:8000.");
+      throw new Error(`Request timed out. Confirm the Django server is running on ${API_BASE}.`);
     }
-    throw new Error("Unable to reach backend. Confirm the Django server is running on http://127.0.0.1:8000.");
+    throw new Error(`Unable to reach backend. Confirm the Django server is running on ${API_BASE}.`);
   }
   window.clearTimeout(timeoutId);
 
