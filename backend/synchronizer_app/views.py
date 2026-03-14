@@ -34,18 +34,18 @@ def create_room(request):
         if not room_code:
             return Response({"detail": "Could not generate unique room code"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    room, created = Room.objects.get_or_create(
+    # Check if room already exists
+    if Room.objects.filter(room_code=room_code).exists():
+        return Response(
+            {"detail": f"Room '{room_code}' already exists. Choose a different room code."},
+            status=status.HTTP_409_CONFLICT
+        )
+
+    room = Room.objects.create(
         room_code=room_code,
-        defaults={
-            "video_url": video_url,
-            "broadcaster": broadcaster,
-        }
+        video_url=video_url,
+        broadcaster=broadcaster,
     )
-    if not created:
-        room.broadcaster = broadcaster
-        if video_url:
-            room.video_url = video_url
-        room.save()
 
     return Response({"room_code": room.room_code}, status=status.HTTP_201_CREATED)
 
