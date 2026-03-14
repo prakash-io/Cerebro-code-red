@@ -19,8 +19,7 @@ export function useRealtimeSync(roomCode, role, config = {}) {
     if (!roomCode) return;
 
     updateTelemetry({ wsStatus: "connecting" });
-    const wsBaseUrl = import.meta.env.VITE_WS_URL || "ws://127.0.0.1:8000";
-    const ws = new WebSocket(`${wsBaseUrl}/ws/sync/${roomCode}/`);
+    const ws = new WebSocket(`ws://127.0.0.1:8000/ws/sync/${roomCode}/`);
     socketRef.current = ws;
 
     ws.onopen = () => {
