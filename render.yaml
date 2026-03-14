@@ -26,10 +26,11 @@ services:
           property: connectionString
 
 databases:
-  - name: cerebro-db
-    databaseName: cerebro
-    user: cerebro
-
   - type: redis
     name: cerebro-redis
     ipAllowList: [] # only allow internal connections
+
+databases:
+  - name: cerebro-db
+    databaseName: cerebro
+    user: cerebro
