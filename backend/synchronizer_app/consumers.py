@@ -1,10 +1,14 @@
 import json
 import time
+import asyncio
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 
 
 class SyncConsumer(AsyncWebsocketConsumer):
+
+    # Shared across all instances: tracks pending room deletion tasks
+    _pending_deletions = {}
 
     async def connect(self):
         self.room_code = self.scope["url_route"]["kwargs"]["room_code"]
@@ -47,19 +51,9 @@ class SyncConsumer(AsyncWebsocketConsumer):
             },
         )
 
-        # If the broadcaster leaves, delete the room so the code can be reused
+        # If the broadcaster leaves, schedule room deletion after 2 minutes
         if self.is_broadcaster:
-            await self.delete_room()
-            await self.channel_layer.group_send(
-                self.room_group,
-                {
-                    "type": "sync_message",
-                    "message": {
-                        "event": "room_closed",
-                        "data": {"reason": "Broadcaster left the room."}
-                    },
-                },
-            )
+            self._schedule_room_deletion(self.room_code, self.room_group)
 
         await self.channel_layer.group_discard(
             self.room_group,
@@ -77,6 +71,8 @@ class SyncConsumer(AsyncWebsocketConsumer):
         # Track broadcaster identity
         if event_type == "identify" and data.get("role") == "broadcaster":
             self.is_broadcaster = True
+            # Cancel any pending deletion (broadcaster rejoined in time)
+            self._cancel_pending_deletion(self.room_code)
             return
 
         # Prevent spam: throttle sync_state to once every 2 seconds
@@ -101,6 +97,38 @@ class SyncConsumer(AsyncWebsocketConsumer):
             text_data=json.dumps(event["message"])
         )
 
+    # ── Delayed room deletion (2-minute grace period) ──
+
+    @classmethod
+    def _schedule_room_deletion(cls, room_code, room_group):
+        """Schedule room deletion after 120 seconds."""
+        # Cancel any existing timer for this room first
+        cls._cancel_pending_deletion(room_code)
+
+        async def _delayed_delete():
+            await asyncio.sleep(120)  # 2-minute grace period
+            from channels.db import database_sync_to_async as db_async
+            from .models import Room
+
+            @db_async
+            def do_delete():
+                Room.objects.filter(room_code=room_code).delete()
+
+            await do_delete()
+            cls._pending_deletions.pop(room_code, None)
+
+        task = asyncio.ensure_future(_delayed_delete())
+        cls._pending_deletions[room_code] = task
+
+    @classmethod
+    def _cancel_pending_deletion(cls, room_code):
+        """Cancel a pending room deletion if broadcaster rejoins."""
+        task = cls._pending_deletions.pop(room_code, None)
+        if task and not task.done():
+            task.cancel()
+
+    # ── Database helpers ──
+
     @database_sync_to_async
     def modify_listener_count(self, delta):
         from .models import Room
@@ -111,9 +139,3 @@ class SyncConsumer(AsyncWebsocketConsumer):
             return room.listener_count
         except Room.DoesNotExist:
             return 0
-
-    @database_sync_to_async
-    def delete_room(self):
-        from .models import Room
-        Room.objects.filter(room_code=self.room_code).delete()
-
