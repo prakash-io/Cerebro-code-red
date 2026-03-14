@@ -25,7 +25,6 @@ services:
           name: cerebro-db
           property: connectionString
 
-databases:
   - type: redis
     name: cerebro-redis
     ipAllowList: [] # only allow internal connections
