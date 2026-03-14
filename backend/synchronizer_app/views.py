@@ -35,9 +35,17 @@ def create_room(request):
             return Response({"detail": "Could not generate unique room code"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     # Check if room already exists
-    if Room.objects.filter(room_code=room_code).exists():
+    existing = Room.objects.filter(room_code=room_code).first()
+    if existing:
+        # Allow the SAME broadcaster to rejoin their room
+        if existing.broadcaster.lower() == broadcaster.lower():
+            if video_url:
+                existing.video_url = video_url
+                existing.save(update_fields=["video_url"])
+            return Response({"room_code": existing.room_code}, status=status.HTTP_200_OK)
+        # Block a DIFFERENT person from hijacking the room
         return Response(
-            {"detail": f"Room '{room_code}' already exists. Choose a different room code."},
+            {"detail": f"Room '{room_code}' is already owned by another broadcaster."},
             status=status.HTTP_409_CONFLICT
         )
 
